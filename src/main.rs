@@ -1,39 +1,31 @@
-// use std::str::FromStr;
-// // use std::sync::Arc;
-
-// use bdk::blockchain::ElectrumBlockchain;
-// use bdk::electrum_client::Client;
-// use bdk::wallet::AddressIndex;
-// use bdk::blockchain::{ElectrumBlockchainConfig, ElectrumBlockchain, ConfigurableBlockchain};
-// use bdk::{Wallet, KeychainKind, SyncOptions};
-// use bdk::{database::MemoryDatabase};
-// use bdk::bitcoin::{Network};
-// use bdk::bitcoin::{secp256k1, PrivateKey, Network};
-// 
-// fn generate_private_key() -> PrivateKey {
-    // let key = secp256k1::SecretKey::new(&mut secp256k1::rand::thread_rng());
-    // let private_key = PrivateKey {
-        // compressed: true,
-        // network: Network::Testnet,
-        // inner: key
-    // };
-    // private_key
-// }
-
-
+use std::collections::BTreeMap;
 use std::str::FromStr;
+
+use bdk::KeychainKind;
+use bdk::bitcoin::{Network};
+use bdk::bitcoin::{secp256k1, PrivateKey};
+
+fn generate_private_key() -> PrivateKey {
+    let key = secp256k1::SecretKey::new(&mut secp256k1::rand::thread_rng());
+    let private_key = PrivateKey {
+        compressed: true,
+        network: Network::Testnet,
+        inner: key
+    };
+    private_key
+}
+
 
 // ========== ==========
 // =====================
 use bdk::{Wallet, database::MemoryDatabase, FeeRate, wallet::tx_builder::TxOrdering};
-use bitcoin::{util::taproot, Address, hashes::hex::{ToHex, FromHex}};
-use secp256k1::{Secp256k1, PublicKey};
+use bitcoin::{util::taproot, Address, hashes::hex::{ToHex}};
+use secp256k1::{Secp256k1};
 
 fn create_taproot_wallet() -> Result<Wallet<MemoryDatabase>, Box<dyn std::error::Error>> {
     use std::{sync::Arc};
 
-    use bdk::{blockchain::{ElectrumBlockchain, ConfigurableBlockchain, ElectrumBlockchainConfig}, wallet::AddressIndex, KeychainKind, SyncOptions};
-    use bitcoin::Network;
+    use bdk::{blockchain::{ElectrumBlockchain, ConfigurableBlockchain, ElectrumBlockchainConfig}, SyncOptions};
 
     let config = ElectrumBlockchainConfig {
         url: "ssl://electrum.blockstream.info:60002".to_string(),
@@ -55,31 +47,19 @@ fn create_taproot_wallet() -> Result<Wallet<MemoryDatabase>, Box<dyn std::error:
 
     taproot_wallet.sync(&blockchain, SyncOptions::default())?;
 
-    // println!("addr: {}", taproot_wallet.get_address(AddressIndex::New)?);
-    // println!("balance: {:?}", taproot_wallet.get_balance());
-// 
-    // println!(
-        // "desc: {}",
-        // taproot_wallet.public_descriptor(KeychainKind::External)?.unwrap()
-    // );
-
     Ok(taproot_wallet)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // println!("{}", generate_private_key());
     // println!("{:?}", create_taproot_wallet());
-    let fee_rate = FeeRate::from_sat_per_vb(20.0);
-
+    let fee_rate = FeeRate::from_sat_per_vb(1.0);
     let wallet = create_taproot_wallet().unwrap();
 
     let secp = Secp256k1::new();
-    // let private_key_slice: Vec<u8> = FromHex::from_hex("cSpTqJiRyoy52yog7zrUNt7BmLjhKadjUNrgBvYGZyhMaSdeDTji").unwrap();
-    // println!("{:?}", private_key_slice);
-
-    let private_key = bitcoin::KeyPair::from_seckey_str(&secp, "cSpTqJiRyoy52yog7zrUNt7BmLjhKadjUNrgBvYGZyhMaSdeDTji").unwrap();
-    // let private_key = bitcoin::KeyPair::from_seckey_slice(&secp, &private_key_slice).unwrap();
-    let to_internal_key = private_key.public_key(); 
+    let private_key= PrivateKey::from_str("cW5eyTngvsoUn4zWdAbN4hnLoeDvgQZgUnLJGazwjSxPAvvZexwp").unwrap();
+    let key_pair = bitcoin::KeyPair::from_seckey_slice(&secp, &private_key.to_bytes()).unwrap();
+    let to_internal_key = key_pair.public_key(); 
 
     println!("To public key: {}", to_internal_key);
 
@@ -92,12 +72,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", address);
     // println!("{}", output_script);
 
+    let mut path = BTreeMap::new();
+    path.insert("mm06tvmp".to_string(), vec![0, 1]);
+
     // // A full list of APIs offered by `TxBuilder` can be found at
     // // https://docs.rs/bdk/latest/bdk/wallet/tx_builder/struct.TxBuilder.html
     let (mut send_back_psbt, details) = {
         let mut builder = wallet.build_tx();
         builder
-            .drain_to(output_details.script_pubkey())
+            .policy_path(path, KeychainKind::External)
             .add_data("Pleb.Fi LA is awesome~".as_bytes())
             .ordering(TxOrdering::Untouched)
             .drain_wallet()
